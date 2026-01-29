@@ -1,0 +1,15 @@
+# Auto detect text files and normalize line endings to LF in repository
+* text=auto
+
+# Python files use LF
+*.py text eol=lf
+*.ppy text eol=lf linguist-language=Python
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Other text files use LF
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
