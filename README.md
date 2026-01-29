@@ -1,6 +1,9 @@
 # SlowPics Offsets Plugin for VSPreview
 
 Compare multiple video sources with per-frame, per-source offsets.
+<p align="center">
+  <img width="528" height="674" alt="preview" src="https://github.com/user-attachments/assets/c4af5de9-7a6e-427c-aa31-1cee4b8867aa" style="width: 40%; height: auto;">
+</p>
 
 ## Features
 
@@ -20,7 +23,7 @@ Copy the `slowpics-offsets` folder to your VSPreview plugins directory:
 
 ### 1. Generate Frames
 
-First go the the "SlowPics Offsets" tab in VSPreview and fill out the frame generation settings.
+First go the the "SlowPics Offsets" tab in VSPreview and fill out the frame generation settings.    
 Click **Generate Frames (using SlowPics settings)** to use the SlowPics plugin's configuration (random frames, picture types, etc.). This creates your initial frame selection.
 
 Alternatively, manually add frames using the **Add Frame** button.
