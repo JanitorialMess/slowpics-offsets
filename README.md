@@ -15,15 +15,34 @@ Compare multiple video sources with per-frame, per-source offsets.
 
 ## Installation
 
-Copy the `slowpics-offsets` folder to your VSPreview plugins directory:
-- Windows: `%APPDATA%\vspreview\plugins\`
-- Linux/Mac: `~/.config/vspreview/plugins/`
+### Method 1: PyPI (Recommended)
+1. Install via pip:
+   ```bash
+   pip install slowpics-offsets
+   ```
+2. Run the setup command to link it to VSPreview:
+   ```bash
+   spo-install
+   ```
+   *This detects your VSPreview plugins folder and installs a loader file.*
+
+   To specify a custom path:
+   ```bash
+   spo-install --path /path/to/plugins
+   ```
+
+### Method 2: Zip / Folder
+1. Download the `slowpics-offsets` folder.
+2. Place it in your VSPreview plugins directory:
+    - **Windows**: `%APPDATA%\vspreview\plugins\`
+    - **Linux/Mac**: `~/.config/vspreview/plugins/`
+3. The folder contains `slowpics_offsets.py` (logic) and `loader.ppy` (loader). Both are needed.
 
 ## Usage
 
 ### 1. Generate Frames
 
-First go the the "SlowPics Offsets" tab in VSPreview and fill out the frame generation settings.    
+First go the the "SlowPics Offsets" tab in VSPreview and fill out the frame generation settings.
 Click **Generate Frames (using SlowPics settings)** to use the SlowPics plugin's configuration (random frames, picture types, etc.). This creates your initial frame selection.
 
 Alternatively, manually add frames using the **Add Frame** button.

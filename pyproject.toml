@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slowpics-offsets"
+version = "1.0.0"
+description = "VSPreview plugin for creating comparison frames with offsets"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "GPL-3.0-only"
+authors = [
+  {name = "SuperTouch"},
+]
+keywords = ["vapoursynth", "vspreview", "plugin", "slowpics"]
+dependencies = [
+  "vspreview",
+  "PyQt6",
+]
+classifiers = [
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Multimedia :: Video",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/JanitorialMess/slowpics-offsets"
+"Bug Tracker" = "https://github.com/JanitorialMess/slowpics-offsets/issues"
+
+[project.scripts]
+spo-install = "cli:main"
+
+[tool.setuptools]
+py-modules = ["slowpics_offsets", "cli"]

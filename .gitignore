@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Distribution / Build
+build/
+dist/
+*.egg-info/
+.eggs/
+
 # IDEs
 .vscode/
 .idea/
@@ -23,5 +29,3 @@ __pycache__/
 *.tmp
 *.temp
 *.bak
-*.swp
-*~

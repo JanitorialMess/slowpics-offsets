@@ -1,0 +1,4 @@
+include slowpics_offsets.py
+include cli.py
+include LICENSE
+include README.md

@@ -1,5 +1,9 @@
+"""
+SlowPics Offsets Plugin
+"""
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import random
@@ -15,15 +19,18 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QFrame,
-    QHBoxLayout as QHBox,
     QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QVBoxLayout as QVBox,
     QWidget,
 )
-
+from PyQt6.QtWidgets import (
+    QHBoxLayout as QHBox,
+)
+from PyQt6.QtWidgets import (
+    QVBoxLayout as QVBox,
+)
 from vspreview.core import (
     Frame,
     HBoxLayout,
@@ -34,10 +41,10 @@ from vspreview.core import (
     Stretch,
     VBoxLayout,
 )
-from vspreview.plugins import AbstractPlugin, PluginConfig
 from vspreview.main import MainWindow
+from vspreview.plugins import AbstractPlugin, PluginConfig
 
-__all__ = ['SlowPicsOffsetsPlugin']
+__all__ = ["SlowPicsOffsetsPlugin"]
 
 try:
     from vspreview.plugins.builtins.slowpics_comp.workers import (
@@ -55,7 +62,7 @@ except ImportError:
 
 
 class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
-    _config = PluginConfig('dev.supertouch.slowpics-offsets', 'SlowPics Offsets')
+    _config = PluginConfig("dev.supertouch.slowpics-offsets", "SlowPics Offsets")
 
     def __init__(self, main: MainWindow) -> None:
         super().__init__(main)
@@ -277,15 +284,16 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             return
 
         try:
-            slowpics_plugin = self.main.plugins['dev.setsugen.comp']
+            slowpics_plugin = self.main.plugins["dev.setsugen.comp"]
             slowpics_plugin.first_load()
             slowpics = slowpics_plugin.main_tab
 
             manual_frames_text = slowpics.manual_frames_lineedit.text()
-            manual_frames = list(
-                map(lambda x: Frame(int(x)),
-                    filter(None, [x.strip() for x in manual_frames_text.split(',') if x.strip()]))
-            ) if manual_frames_text else []
+            manual_frames = [
+                Frame(int(x.strip()))
+                for x in manual_frames_text.split(",")
+                if x.strip()
+            ] if manual_frames_text else []
 
             num_random = int(slowpics.random_frames_control.value())
             seed_text = slowpics.random_seed_control.text()
@@ -295,11 +303,11 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
 
             picture_types = set()
             if slowpics.pic_type_button_I.isChecked():
-                picture_types.add('I')
+                picture_types.add("I")
             if slowpics.pic_type_button_B.isChecked():
-                picture_types.add('B')
+                picture_types.add("B")
             if slowpics.pic_type_button_P.isChecked():
-                picture_types.add('P')
+                picture_types.add("P")
 
             samples = list(manual_frames)
             if slowpics.current_frame_checkbox.isChecked():
@@ -312,9 +320,9 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
                 self._set_status("No outputs loaded", is_error=True)
                 return
 
-            lens = set(out.prepared.clip.num_frames for out in self.main.outputs)
+            lens = {out.prepared.clip.num_frames for out in self.main.outputs}
             if len(lens) != 1:
-                logging.warning('Outputs don\'t all have the same length!')
+                logging.warning("Outputs don't all have the same length!")
 
             lens_n = min(lens)
             end_frame = min(lens_n, end_frame)
@@ -383,21 +391,17 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
 
     def _cleanup_search_thread(self) -> None:
         if self.search_thread is not None:
-            try:
+            with contextlib.suppress(RuntimeError):
                 self.search_thread.deleteLater()
-            except RuntimeError:
-                pass
             self.search_thread = None
         if self.search_worker is not None:
-            try:
+            with contextlib.suppress(RuntimeError):
                 self.search_worker.deleteLater()
-            except RuntimeError:
-                pass
             self.search_worker = None
         self._is_generating = False
 
     def on_frames_generated(self, uuid: str, config: FindFramesWorkerConfiguration) -> None:
-        self.selected_frames = sorted(set(int(f) for f in config.samples))
+        self.selected_frames = sorted({int(f) for f in config.samples})
         self.current_frame_index = 0
 
         self.update_frame_list()
@@ -518,7 +522,7 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
 
         try:
             try:
-                slowpics_plugin = self.main.plugins['dev.setsugen.comp']
+                slowpics_plugin = self.main.plugins["dev.setsugen.comp"]
                 slowpics_plugin.first_load()
                 slowpics = slowpics_plugin.main_tab
             except KeyError:
@@ -564,10 +568,10 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             traceback.print_exc()
 
     def on_upload_progress(self, uuid: str, kind: str, curr: int | None, total: int | None) -> None:
-        if kind in ('extract', 'upload', 'search'):
+        if kind in ("extract", "upload", "search"):
             info = f" {curr or '?'}/{total or '?'}" if curr or total else ""
             self.status_label.setText(f"{kind.capitalize()}{info}...")
-        elif kind.startswith('https://'):
+        elif kind.startswith("https://"):
             self.output_url_lineedit.setText(kind)
             self.status_label.setText("Done! URL copied to clipboard.")
             self.upload_button.setEnabled(True)
@@ -586,9 +590,9 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             return
 
         try:
-            slowpics = self.main.plugins['dev.setsugen.comp']
+            slowpics = self.main.plugins["dev.setsugen.comp"]
 
-            frames_str = ','.join(str(f) for f in self.selected_frames)
+            frames_str = ",".join(str(f) for f in self.selected_frames)
             slowpics.main_tab.manual_frames_lineedit.setText(frames_str)
             self.main.plugins_tab.setCurrentIndex(slowpics.index)
 
@@ -604,7 +608,7 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             return
 
         default_name = "offset_comp_state.json"
-        if hasattr(self.main, 'script_path') and self.main.script_path:
+        if hasattr(self.main, "script_path") and self.main.script_path:
             script_name = Path(self.main.script_path).stem
             default_name = f"{script_name}_offsets.json"
 
@@ -635,7 +639,7 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
                 if frame_data:
                     export_data["offsets"][str(int(frame_num))] = frame_data
 
-            with open(path, 'w', encoding='utf-8') as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(export_data, f, indent=2)
                 f.flush()
 
@@ -656,7 +660,7 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             return
 
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             name_to_idx = {out.name: i for i, out in enumerate(self.main.outputs)}
@@ -680,7 +684,7 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
                     continue
 
             self.selected_frames.sort()
-            if hasattr(self, 'frame_list'):
+            if hasattr(self, "frame_list"):
                 self.update_frame_list()
 
             if self.selected_frames:
@@ -827,17 +831,17 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
 
     def __getstate__(self) -> dict[str, Any]:
         return super().__getstate__() | {
-            'frame_offsets': self.frame_offsets,
-            'selected_frames': self.selected_frames,
+            "frame_offsets": self.frame_offsets,
+            "selected_frames": self.selected_frames,
         }
 
     def __setstate__(self) -> None:
         state = self.settings.local
 
-        if 'frame_offsets' in state:
-            self.frame_offsets = state['frame_offsets']
+        if "frame_offsets" in state:
+            self.frame_offsets = state["frame_offsets"]
 
-        if 'selected_frames' in state:
-            self.selected_frames = state['selected_frames']
-            if hasattr(self, 'frame_list'):
+        if "selected_frames" in state:
+            self.selected_frames = state["selected_frames"]
+            if hasattr(self, "frame_list"):
                 self.update_frame_list()
