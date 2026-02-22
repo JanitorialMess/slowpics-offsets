@@ -1,6 +1,6 @@
 # SlowPics Offsets Plugin for VSPreview
 
-Compare multiple video sources with per-frame, per-source offsets.
+Compare multiple video sources with per-frame, per-source offsets, then upload either as a new slow.pics comp or append to an existing comp.
 <p align="center">
   <img width="528" height="674" alt="preview" src="https://github.com/user-attachments/assets/c4af5de9-7a6e-427c-aa31-1cee4b8867aa" style="width: 40%; height: auto;">
 </p>
@@ -10,6 +10,9 @@ Compare multiple video sources with per-frame, per-source offsets.
 - **Per-frame offsets** - Set different offsets for each frame, per source
 - **SlowPics Comp support** - Generate frames using SlowPics Comp settings
 - **Frame management** - Add, edit, remove frames manually
+- **Upload modes** - `New Comparison` and `Append to Existing`
+- **Append by clone** - Loads an existing comp, clones it, and appends selected local sources
+- **Manual frame mapping fallback** - Provide an explicit row-to-frame map when frame parsing fails
 - **Offset-aware upload** - Upload to slow.pics with offsets applied per source
 - **State persistence** - Save and load frame selections with offsets for future comps
 
@@ -31,21 +34,36 @@ Compare multiple video sources with per-frame, per-source offsets.
    spo-install --path /path/to/plugins
    ```
 
-### Method 2: Zip / Folder
-1. Download the `slowpics-offsets` folder.
-2. Place it in your VSPreview plugins directory:
-    - **Windows**: `%APPDATA%\vspreview\plugins\`
-    - **Linux/Mac**: `~/.config/vspreview/plugins/`
-3. The folder contains `slowpics_offsets.py` (logic) and `loader.ppy` (loader). Both are needed.
+### Method 2: Local Source Install
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/JanitorialMess/slowpics-offsets.git
+   cd slowpics-offsets
+   ```
+2. Install in editable mode:
+   ```bash
+   pip install -e .
+   ```
+3. Link it to VSPreview:
+   ```bash
+   spo-install
+   ```
+
+## Requirements
+
+- VSPreview with the built-in `SlowPics Comp` plugin available
 
 ## Usage
 
-### 1. Generate Frames
+### 1. Select Frames
 
-First go the the "SlowPics Offsets" tab in VSPreview and fill out the frame generation settings.
-Click **Generate Frames (using SlowPics settings)** to use the SlowPics plugin's configuration (random frames, picture types, etc.). This creates your initial frame selection.
+Use **Generate Frames (using SlowPics settings)** to import frame selection from the built-in SlowPics Comp settings.
 
-Alternatively, manually add frames using the **Add Frame** button.
+Or manage frames manually with:
+- **Add Frame**
+- **Edit Frame**
+- **Remove Frame**
+- **Prev / Next** navigation
 
 ### 2. Set Offsets
 
@@ -57,12 +75,35 @@ For each frame in your selection:
 
 Each frame can have different offsets per source. For example, if a transition appears on frame 5000 in one source, you can set a +10 offset just for that frame.
 
-### 3. Upload or Save
+### 3. Choose Upload Mode
 
-- **Upload** - Uploads to slow.pics with offset-adjusted frames per source
-- **Save Offsets** - Saves frame selection and offsets to JSON for later use
-- **Load Offsets** - Restores a previously saved configuration
-- **Send to SlowPics Comps Tab** - Sends frame numbers to SlowPics Comps without offsets
+- **New Comparison**:
+  - Uploads selected local sources as a new comp
+  - Cookies are optional (anonymous upload can work, same as built-in behavior)
+- **Append to Existing**:
+  1. Paste a target key/URL (for example `https://slow.pics/c/abcd1234`)
+  2. Click **Load**
+  3. If frame numbers were not parsed from target rows, enter a manual frame map and click **Apply**
+  4. Select local sources to append
+  5. Click **Upload**
+  - This mode may require cookies (clone permission can fail with 401/403)
+
+#### Manual Frame Mapping (Append Mode)
+
+Append mode must map target rows to local frame numbers 1:1 and in order.
+
+- The plugin first tries to parse frame indices from target row names.
+- If parsing fails, or your local frame list changes after loading target, you must provide the map manually.
+- Format: comma-separated frame numbers (for example `100, 250, 500`).
+- The number of entries must match target row count exactly.
+
+Append mode uses the original slow.pics clone flow.
+
+### 4. Save/Load and Interop
+
+- **Save Offsets**: save selected frames + offsets to JSON
+- **Load Offsets**: restore selected frames + offsets from JSON
+- **Send Frame List to SlowPics Comps Tab**: send frame numbers to built-in SlowPics Comp without offsets
 
 ## Keyboard Shortcuts
 
@@ -71,7 +112,7 @@ Each frame can have different offsets per source. For example, if a transition a
 
 ## JSON Format
 
-State files this format:
+State files use this format:
 
 ```json
 {
@@ -86,7 +127,7 @@ State files this format:
 }
 ```
 
-Only frames with non-zero offsets are stored. Offsets are keyed by source name. Changes to source names between sessions requires manual remapping.
+Only frames with non-zero offsets are stored. Offsets are keyed by source name. If source names change between sessions, remapping is required.
 
 ## Warning
-This project heavily depends on SlowPics Comp plugin internals. Updates to that plugin may break functionality. I did not want to duplicate all the frame generation logic, so this plugin hooks into SlowPics Comp directly. Use at your own risk.
+This plugin intentionally relies on internals from VSPreview's built-in SlowPics Comp plugin. Updates in VSPreview may change those internals and break behavior.
