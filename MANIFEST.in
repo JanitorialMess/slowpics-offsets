@@ -1,4 +1,4 @@
-include slowpics_offsets.py
+graft slowpics_offsets
 include cli.py
 include LICENSE
 include README.md

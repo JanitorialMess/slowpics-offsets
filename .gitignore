@@ -8,6 +8,7 @@ build/
 dist/
 *.egg-info/
 .eggs/
+.pytest_cache/
 
 # IDEs
 .vscode/
@@ -29,3 +30,15 @@ dist/
 *.tmp
 *.temp
 *.bak
+
+# Local environments
+.venv/
+
+# Runtime/debug artifacts
+debug-output/
+__pycache__/
+
+# Project
+tests/
+scripts/
+

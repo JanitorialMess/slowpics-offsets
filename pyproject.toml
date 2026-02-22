@@ -35,5 +35,43 @@ classifiers = [
 [project.scripts]
 spo-install = "cli:main"
 
+[project.optional-dependencies]
+dev = [
+  "pyright>=1.1.390",
+]
+
 [tool.setuptools]
-py-modules = ["slowpics_offsets", "cli"]
+py-modules = ["cli"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["slowpics_offsets*"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+include = [
+  "cli.py",
+  "slowpics_offsets/components.py",
+  "slowpics_offsets/models.py",
+  "slowpics_offsets/plugin.py",
+  "slowpics_offsets/utils.py",
+  "slowpics_offsets/workers.py",
+]
+exclude = [
+  ".venv",
+  "backup",
+  "build",
+  "dist",
+  "scripts",
+  "slowpics_offsets.egg-info",
+]
+executionEnvironments = [
+  { root = "." },
+]
+reportMissingTypeStubs = false
+reportMissingImports = false
+reportOptionalMemberAccess = "none"
+reportOptionalCall = "none"
+reportInvalidTypeForm = "none"
+reportArgumentType = "warning"
