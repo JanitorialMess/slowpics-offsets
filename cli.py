@@ -16,6 +16,22 @@ def get_default_plugin_dir() -> Path:
     else:
         return Path.home() / ".config" / "vspreview" / "plugins"
 
+
+def migrate_legacy_plugin_file(plugin_dir: Path) -> None:
+    legacy_path = plugin_dir / "slowpics-offsets.ppy"
+    if not legacy_path.exists():
+        return
+
+    migrated_path = legacy_path.with_name(f"{legacy_path.name}.old")
+    idx = 1
+    while migrated_path.exists():
+        migrated_path = legacy_path.with_name(f"{legacy_path.name}.old.{idx}")
+        idx += 1
+
+    legacy_path.rename(migrated_path)
+    print(f"Migrated legacy plugin: {legacy_path.name} -> {migrated_path.name}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Install the SlowPics Offsets plugin loader for VSPreview.")
     parser.add_argument(
@@ -40,15 +56,10 @@ def main():
 
     loader_path = plugin_dir / "loader.ppy"
 
-    # Cleanup legacy loaders
-    for legacy in ["slowpics_offsets.ppy", "slowpics_loader.ppy"]:
-        legacy_path = plugin_dir / legacy
-        if legacy_path.exists():
-            try:
-                legacy_path.unlink()
-                print(f"Removed legacy loader: {legacy}")
-            except Exception as e:
-                print(f"Warning: Could not remove {legacy}: {e}")
+    try:
+        migrate_legacy_plugin_file(plugin_dir)
+    except Exception as e:
+        print(f"Warning: Could not migrate legacy plugin file: {e}")
 
     try:
         print(f"Installing loader to: {loader_path}")
