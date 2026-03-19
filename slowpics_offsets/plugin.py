@@ -353,6 +353,10 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             self._set_append_status(f"{kind.capitalize()}{info}...")
             return True
 
+        if kind.startswith("Retry:"):
+            self._set_append_status(kind.removeprefix("Retry:").strip())
+            return True
+
         if kind.startswith("https://"):
             self.output_url_lineedit.setText(kind)
             self._set_append_status("Upload complete. URL copied to clipboard.", is_ready=True)
@@ -361,8 +365,13 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
                 self.main.show_message(f"Uploaded: {kind}")
             return True
 
+        if kind == "Session Expired":
+            self._set_append_status("Session expired.", is_error=True)
+            return True
+
         if kind.startswith("Error:"):
-            self._set_append_status(kind, is_error=True)
+            message = kind.removeprefix("Error:").strip() or "Upload failed."
+            self._set_append_status(message, is_error=True)
             return True
 
         return False
@@ -819,7 +828,8 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
         self.load_target_worker.error.connect(self.on_target_load_error)
         self.load_target_thread.finished.connect(self._cleanup_load_target_thread)
 
-        self._set_append_status("Fetching target comparison data...", is_ready=False)
+        self.append_controls_widget.target_load_widget.set_status("Loading target...")
+        self._set_append_status("Loading target...")
         self.load_target_thread.start()
 
     def _cleanup_load_target_thread(self) -> None:
@@ -827,7 +837,8 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
         self._update_append_controls()
 
     def on_target_load_error(self, uuid: str, msg: str) -> None:
-        self._set_append_status(msg, is_error=True)
+        self.append_controls_widget.target_load_widget.set_status(msg, is_error=True)
+        self._set_append_status("Target load failed.", is_error=True)
 
         if self.load_target_thread is not None:
             self.load_target_thread.quit()
@@ -847,7 +858,8 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
 
         comparisons = collection.get("comparisons", [])
         if not isinstance(comparisons, list) or not comparisons:
-            self._set_append_status("Target comparison has no rows/frames.", is_error=True)
+            self.append_controls_widget.target_load_widget.set_status("Target has no rows.", is_error=True)
+            self._set_append_status("Target load failed.", is_error=True)
             self._update_append_controls()
             return
 
@@ -886,11 +898,10 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             failed_preview = ", ".join(str(i + 1) for i in failed[:8])
             suffix = "..." if len(failed) > 8 else ""
             self.append_controls_widget.target_load_widget.set_status(
-                f"Loaded target ({len(comparisons)} rows). "
-                f"Unparsed rows: {failed_preview}{suffix}"
+                f"Target: {len(comparisons)} rows, map needed ({failed_preview}{suffix})"
             )
             self._set_append_status(
-                "Manual frame map required.",
+                "Manual map required.",
                 is_error=True
             )
             self._update_append_controls()
@@ -905,9 +916,9 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             self.navigate_to_current_frame()
 
         self.append_controls_widget.target_load_widget.set_status(
-            f"Loaded target ({len(comparisons)} rows). Frame map parsed."
+            f"Target: {len(comparisons)} rows, map parsed"
         )
-        self._set_append_status("Target loaded and frame map parsed.", is_ready=True)
+        self._set_append_status("Target ready.", is_ready=True)
         self._update_append_controls()
 
     def on_apply_manual_target_frames_clicked(self, explicit_raw: str = "") -> None:
@@ -945,8 +956,11 @@ class SlowPicsOffsetsPlugin(AbstractPlugin, QWidget):
             self.frame_selection_widget.select_row(0)
             self.navigate_to_current_frame()
 
+        self.append_controls_widget.target_load_widget.set_status(
+            f"Target: {len(manual_frames)} rows, manual map"
+        )
         self._set_append_status(
-            f"Manual frame map applied ({len(manual_frames)} rows).",
+            "Manual map applied.",
             is_ready=True
         )
         self._update_append_controls()

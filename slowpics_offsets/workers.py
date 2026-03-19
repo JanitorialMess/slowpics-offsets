@@ -11,7 +11,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from PyQt6.QtCore import QObject, pyqtSignal
-from requests import RequestException, Session
+from requests import RequestException, Response, Session
 from requests.utils import cookiejar_from_dict
 from requests_toolbelt import MultipartEncoder
 from vstools import vs
@@ -37,6 +37,9 @@ from .utils import (
     get_append_slowpic_upload_headers,
 )
 
+RETRY_DELAYS = (5.0, 10.0, 20.0)
+RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
 
 class TargetLoadWorker(QObject):
     finished = pyqtSignal(str, dict)
@@ -51,7 +54,7 @@ class TargetLoadWorker(QObject):
                     timeout=60
                 )
             if response.status_code != 200:
-                self.error.emit(conf.uuid, f"Failed to load target comparison: HTTP {response.status_code}.")
+                self.error.emit(conf.uuid, f"Target failed ({response.status_code})")
                 return
 
             collection = extract_json_var(response.text, "collection")
@@ -67,7 +70,7 @@ class TargetLoadWorker(QObject):
                 else:
                     parsed_fallback = None
                 if not parsed_fallback:
-                    self.error.emit(conf.uuid, "Could not resolve target comparison data.")
+                    self.error.emit(conf.uuid, "Target data missing.")
                     return
                 set_key = parsed_fallback
 
@@ -84,11 +87,11 @@ class TargetLoadWorker(QObject):
                     edit_dto = extract_json_var(clone_response.text, "collectionDTO")
                     post_mode = "clone"
                 elif clone_response.status_code in (401, 403):
-                    msg = "Clone is forbidden for this comparison. Login with a suitable account first."
+                    msg = "Clone denied."
                     self.error.emit(conf.uuid, msg)
                     return
                 else:
-                    self.error.emit(conf.uuid, f"Failed to load clone page: HTTP {clone_response.status_code}")
+                    self.error.emit(conf.uuid, f"Clone failed ({clone_response.status_code})")
                     return
 
             result = {
@@ -99,7 +102,8 @@ class TargetLoadWorker(QObject):
             }
             self.finished.emit(conf.uuid, result)
         except Exception as exc:
-            self.error.emit(conf.uuid, f"Target load error: {exc}")
+            logging.warning("TargetLoadWorker failed: %s", exc)
+            self.error.emit(conf.uuid, "Target failed: network.")
 
 
 class AppendSourcesWorker(QObject):
@@ -125,58 +129,124 @@ class AppendSourcesWorker(QObject):
         except Exception:
             return "?"
 
+    def _emit_retry_status(self, uuid: str, label: str, retry_index: int) -> None:
+        self.progress_status.emit(uuid, f"Retry:{label} Retry {retry_index}/{len(RETRY_DELAYS)}...", 0, 0)
+
+    def _failure_message_from_status(self, status_code: int) -> str:
+        if status_code == 429:
+            return "Upload failed: rate limit."
+        if status_code in (401, 403):
+            return "Upload failed: auth."
+        if status_code == 404:
+            return "Upload failed: not found."
+        if status_code in RETRYABLE_STATUS_CODES or 500 <= status_code <= 599:
+            return "Upload failed: server."
+        return "Upload failed."
+
+    def _request_with_retries(
+        self,
+        sess: Session,
+        method: str,
+        url: str,
+        *,
+        uuid: str,
+        headers: dict[str, str],
+        timeout: int,
+        context: str,
+        data: bytes | None = None,
+        allow_image_complete: bool = False,
+    ) -> Response:
+        for retry_index, delay in enumerate(RETRY_DELAYS + (None,), start=1):
+            try:
+                response = sess.request(
+                    method,
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    data=data,
+                )
+            except RequestException as exc:
+                if delay is not None:
+                    logging.warning("%s network retry %s/%s: %s", context, retry_index, len(RETRY_DELAYS), exc)
+                    self._emit_retry_status(uuid, "Network error.", retry_index)
+                    time.sleep(delay)
+                    continue
+                logging.warning("%s failed with network error: %s", context, exc)
+                raise RuntimeError("Upload failed: network.") from exc
+
+            if allow_image_complete and response.status_code == 400 and response.headers.get("X-Error-Message") == "IMAGE_IS_COMPLETE":
+                return response
+
+            if 200 <= response.status_code < 300:
+                return response
+
+            api_error = self._extract_api_error_message(response.text)
+            if delay is not None and response.status_code in RETRYABLE_STATUS_CODES:
+                retry_label = "Rate limited." if response.status_code == 429 else "Server busy."
+                logging.warning(
+                    "%s retry %s/%s after HTTP %s%s",
+                    context,
+                    retry_index,
+                    len(RETRY_DELAYS),
+                    response.status_code,
+                    f": {api_error}" if api_error else "",
+                )
+                self._emit_retry_status(uuid, retry_label, retry_index)
+                time.sleep(delay)
+                continue
+
+            logging.warning(
+                "%s failed with status %s%s",
+                context,
+                response.status_code,
+                f": {api_error}" if api_error else "",
+            )
+            raise RuntimeError(self._failure_message_from_status(response.status_code))
+
+        raise RuntimeError("Upload failed.")
+
     def _upload_single_image(
         self,
         sess: Session,
         collection_uuid: str,
         image_uuid: str,
         image_path: Path,
+        uuid: str,
         browser_id: str,
         *,
         file_name: str | None = None,
         mime_type: str = "image/png"
     ) -> None:
-        for attempt in range(1, 4):
-            upload_info = MultipartEncoder({
-                "collectionUuid": collection_uuid,
-                "imageUuid": image_uuid,
-                "file": (file_name or image_path.name, image_path.read_bytes(), mime_type),
-                "browserId": browser_id,
-            }, str(uuid4()))
+        upload_info = MultipartEncoder({
+            "collectionUuid": collection_uuid,
+            "imageUuid": image_uuid,
+            "file": (file_name or image_path.name, image_path.read_bytes(), mime_type),
+            "browserId": browser_id,
+        }, str(uuid4()))
 
-            try:
-                response = sess.post(
-                    f"{APIEndpoints.BASE}/upload/image/{image_uuid}",
-                    data=upload_info.to_string(),
-                    headers=get_append_slowpic_upload_headers(upload_info.len, upload_info.content_type, sess),
-                    timeout=120
-                )
+        self._request_with_retries(
+            sess,
+            "POST",
+            f"{APIEndpoints.BASE}/upload/image/{image_uuid}",
+            uuid=uuid,
+            headers=get_append_slowpic_upload_headers(upload_info.len, upload_info.content_type, sess),
+            timeout=120,
+            context=f"Append upload `{image_uuid}`",
+            data=upload_info.to_string(),
+            allow_image_complete=True,
+        )
 
-                if response.status_code == 400 and response.headers.get("X-Error-Message") == "IMAGE_IS_COMPLETE":
-                    return
-
-                response.raise_for_status()
-                return
-            except RequestException as exc:
-                if attempt >= 3:
-                    raise RuntimeError(f"Failed to upload image `{image_uuid}`: {exc}") from exc
-                time.sleep(1.5 * attempt)
-
-    def _download_image_to_path(self, sess: Session, image_url: str, out_path: Path) -> None:
-        for attempt in range(1, 4):
-            try:
-                response = sess.get(
-                    image_url,
-                    headers=get_append_slowpic_headers(sess),
-                    timeout=120
-                )
-                response.raise_for_status()
-                out_path.write_bytes(response.content)
-                return
-            except RequestException as exc:
-                if attempt >= 3:
-                    raise RuntimeError(f"Failed to download existing image `{image_url}`: {exc}") from exc
-                time.sleep(1.5 * attempt)
+    def _download_image_to_path(self, sess: Session, image_url: str, out_path: Path, *, uuid: str) -> None:
+        response = self._request_with_retries(
+            sess,
+            "GET",
+            image_url,
+            uuid=uuid,
+            headers=get_append_slowpic_headers(sess),
+            timeout=120,
+            context=f"Existing image fetch `{image_url}`",
+        )
+        out_path.write_bytes(response.content)
 
     def _extract_api_error_message(self, response_text: str) -> str | None:
         try:
@@ -426,9 +496,9 @@ class AppendSourcesWorker(QObject):
                 image_path = tempdir / f"existing_{row}_{col}.bin"
 
                 self.progress_status.emit(conf.uuid, "upload", uploaded + 1, total_upload)
-                self._download_image_to_path(sess, file_url, image_path)
+                self._download_image_to_path(sess, file_url, image_path, uuid=conf.uuid)
                 self._upload_single_image(
-                    sess, str(collection_uuid), image_uuid, image_path, browser_id,
+                    sess, str(collection_uuid), image_uuid, image_path, conf.uuid, browser_id,
                     file_name=file_name, mime_type=file_mime
                 )
                 uploaded += 1
@@ -447,7 +517,9 @@ class AppendSourcesWorker(QObject):
                 new_image_path = extracted_paths[list_idx][row]
 
                 self.progress_status.emit(conf.uuid, "upload", uploaded + 1, total_upload)
-                self._upload_single_image(sess, str(collection_uuid), image_uuid, new_image_path, browser_id)
+                self._upload_single_image(
+                    sess, str(collection_uuid), image_uuid, new_image_path, conf.uuid, browser_id
+                )
                 uploaded += 1
                 self._progress_update(total_extract + uploaded, total_progress, uuid=conf.uuid)
 
@@ -470,10 +542,14 @@ class AppendSourcesWorker(QObject):
                 if conf.cookies_path.is_file():
                     sess.cookies.update(cookiejar_from_dict(json.loads(conf.cookies_path.read_text(encoding="utf-8"))))
 
-                _ = sess.get(
+                _ = self._request_with_retries(
+                    sess,
+                    "GET",
                     f"{APIEndpoints.BASE}/comparison",
+                    uuid=conf.uuid,
                     headers=get_append_slowpic_headers(sess),
-                    timeout=45
+                    timeout=45,
+                    context="Append bootstrap",
                 )
 
                 form = MultipartEncoder(fields, str(uuid4()))
@@ -482,34 +558,17 @@ class AppendSourcesWorker(QObject):
                     if conf.post_mode == "edit"
                     else f"{APIEndpoints.BASE}/upload/comparison"
                 )
-                edit_response = sess.post(
+                mode_label = "Append edit" if conf.post_mode == "edit" else "Append clone"
+                edit_response = self._request_with_retries(
+                    sess,
+                    "POST",
                     post_url,
-                    data=form.to_string(),
+                    uuid=conf.uuid,
                     headers=get_append_slowpic_upload_headers(form.len, form.content_type, sess),
-                    timeout=180
+                    timeout=180,
+                    context=mode_label,
+                    data=form.to_string(),
                 )
-
-                if not (200 <= edit_response.status_code < 300):
-                    mode_label = "edit" if conf.post_mode == "edit" else "clone"
-                    api_error = self._extract_api_error_message(edit_response.text)
-
-                    if edit_response.status_code in (401, 403):
-                        if api_error:
-                            raise PermissionError(f"No {mode_label} access for this comparison (403/401). {api_error}")
-                        raise PermissionError(f"No {mode_label} access for this comparison (403/401).")
-
-                    if edit_response.status_code == 429 and api_error:
-                        raise RuntimeError(f"{mode_label.capitalize()} rate-limited: {api_error}")
-
-                    if api_error:
-                        raise RuntimeError(
-                            f"{mode_label.capitalize()} request failed with status "
-                            f"{edit_response.status_code}: {api_error}"
-                        )
-
-                    raise RuntimeError(
-                        f"{mode_label.capitalize()} request failed with status {edit_response.status_code}"
-                    )
 
                 edit_json = edit_response.json()
                 if not isinstance(edit_json, dict):
@@ -530,7 +589,8 @@ class AppendSourcesWorker(QObject):
             self.progress_status.emit(conf.uuid, f"{APIEndpoints.BASE}/c/{result_key}", 0, 0)
         except Exception as exc:
             logging.exception("AppendSourcesWorker failed")
-            self.progress_status.emit(conf.uuid, f"Error: {exc}", 0, 0)
+            message = str(exc).strip() or "Upload failed."
+            self.progress_status.emit(conf.uuid, f"Error: {message}", 0, 0)
         finally:
             shutil.rmtree(tempdir, ignore_errors=True)
             self.finished.emit(conf.uuid)
