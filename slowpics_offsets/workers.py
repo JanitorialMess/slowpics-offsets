@@ -5,6 +5,7 @@ import logging
 import re
 import shutil
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -39,6 +40,23 @@ from .utils import (
 
 RETRY_DELAYS = (5.0, 10.0, 20.0)
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+APPEND_REQUESTS_PER_SECOND = 3.0
+APPEND_MIN_REQUEST_INTERVAL = 1.0 / APPEND_REQUESTS_PER_SECOND
+_append_request_lock = threading.Lock()
+_next_append_request_time = 0.0
+
+
+def _wait_for_append_request_slot() -> None:
+    global _next_append_request_time
+
+    with _append_request_lock:
+        now = time.monotonic()
+        wait_for = max(0.0, _next_append_request_time - now)
+        request_time = max(now, _next_append_request_time)
+        _next_append_request_time = request_time + APPEND_MIN_REQUEST_INTERVAL
+
+    if wait_for > 0:
+        time.sleep(wait_for)
 
 
 class TargetLoadWorker(QObject):
@@ -48,6 +66,7 @@ class TargetLoadWorker(QObject):
     def run(self, conf: TargetLoadWorkerConfiguration) -> None:
         try:
             with Session() as sess:
+                _wait_for_append_request_slot()
                 response = sess.get(
                     f"{APIEndpoints.BASE}{conf.view_path}",
                     headers=get_append_slowpic_headers(sess),
@@ -78,6 +97,7 @@ class TargetLoadWorker(QObject):
                 if conf.cookies_path.is_file():
                     sess.cookies.update(cookiejar_from_dict(json.loads(conf.cookies_path.read_text(encoding="utf-8"))))
 
+                _wait_for_append_request_slot()
                 clone_response = sess.get(
                     f"{APIEndpoints.BASE}/c/{set_key}/clone",
                     headers=get_append_slowpic_headers(sess),
@@ -158,6 +178,7 @@ class AppendSourcesWorker(QObject):
     ) -> Response:
         for retry_index, delay in enumerate(RETRY_DELAYS + (None,), start=1):
             try:
+                _wait_for_append_request_slot()
                 response = sess.request(
                     method,
                     url,
