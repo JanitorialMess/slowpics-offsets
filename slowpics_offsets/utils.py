@@ -3,7 +3,20 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+from importlib.metadata import PackageNotFoundError, version as package_version
+from pathlib import Path
 from typing import Any
+
+from requests import Session
+
+try:
+    from vspreview.plugins.builtins.slowpics_comp.utils import get_slowpic_headers as builtin_get_slowpic_headers
+except ImportError:
+    builtin_get_slowpic_headers = None
+
+PLUGIN_PACKAGE_NAME = "slowpics-offsets"
+PLUGIN_REPO_URL = "https://github.com/JanitorialMess/slowpics-offsets"
+PLUGIN_USER_AGENT_NAME = "slowpics-offsets"
 
 
 def extract_json_var(html: str, var_name: str) -> dict[str, Any]:
@@ -73,6 +86,53 @@ def build_append_collection_name(target_name: str, source_names: list[str], fall
         result_name = f"{result_name} vs {source_name}"
 
     return result_name
+
+
+def get_plugin_version() -> str:
+    try:
+        return package_version(PLUGIN_PACKAGE_NAME)
+    except PackageNotFoundError:
+        pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        if pyproject_path.is_file():
+            match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject_path.read_text(encoding="utf-8"))
+            if match:
+                return match.group(1)
+        return "0+unknown"
+
+
+def get_append_slowpic_user_agent() -> str:
+    return f"vs-preview [{PLUGIN_USER_AGENT_NAME}] ({PLUGIN_REPO_URL} {get_plugin_version()})"
+
+
+def get_append_slowpic_headers(sess: Session) -> dict[str, str]:
+    if builtin_get_slowpic_headers is not None:
+        headers = dict(builtin_get_slowpic_headers(sess))
+    else:
+        headers = {
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Access-Control-Allow-Origin": "*",
+            "Origin": "https://slow.pics/",
+            "Referer": "https://slow.pics/comparison",
+        }
+
+    headers["User-Agent"] = get_append_slowpic_user_agent()
+
+    xsrf_token = str(sess.cookies.get("XSRF-TOKEN", "") or "").strip()
+    if xsrf_token:
+        headers["X-XSRF-TOKEN"] = xsrf_token
+    else:
+        headers.pop("X-XSRF-TOKEN", None)
+
+    return headers
+
+
+def get_append_slowpic_upload_headers(content_length: int, content_type: str, sess: Session) -> dict[str, str]:
+    return {
+        "Content-Length": str(content_length),
+        "Content-Type": content_type,
+    } | get_append_slowpic_headers(sess)
 
 
 def normalize_frame_offsets_state(raw: Any) -> dict[int, dict[int, int]]:

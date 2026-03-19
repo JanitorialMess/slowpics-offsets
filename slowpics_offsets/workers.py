@@ -19,13 +19,9 @@ from vstools import vs
 try:
     from vspreview.plugins.builtins.slowpics_comp.utils import (
         get_frame_time,
-        get_slowpic_headers,
-        get_slowpic_upload_headers,
     )
 except ImportError:
     get_frame_time = None
-    get_slowpic_headers = None
-    get_slowpic_upload_headers = None
 
 from .models import (
     APIEndpoints,
@@ -35,7 +31,11 @@ from .models import (
     SlowpicsImage,
     TargetLoadWorkerConfiguration,
 )
-from .utils import extract_json_var
+from .utils import (
+    extract_json_var,
+    get_append_slowpic_headers,
+    get_append_slowpic_upload_headers,
+)
 
 
 class TargetLoadWorker(QObject):
@@ -45,7 +45,11 @@ class TargetLoadWorker(QObject):
     def run(self, conf: TargetLoadWorkerConfiguration) -> None:
         try:
             with Session() as sess:
-                response = sess.get(f"{APIEndpoints.BASE}{conf.view_path}", timeout=60)
+                response = sess.get(
+                    f"{APIEndpoints.BASE}{conf.view_path}",
+                    headers=get_append_slowpic_headers(sess),
+                    timeout=60
+                )
             if response.status_code != 200:
                 self.error.emit(conf.uuid, f"Failed to load target comparison: HTTP {response.status_code}.")
                 return
@@ -73,7 +77,7 @@ class TargetLoadWorker(QObject):
 
                 clone_response = sess.get(
                     f"{APIEndpoints.BASE}/c/{set_key}/clone",
-                    headers=get_slowpic_headers(sess),
+                    headers=get_append_slowpic_headers(sess),
                     timeout=60
                 )
                 if clone_response.status_code == 200:
@@ -144,7 +148,7 @@ class AppendSourcesWorker(QObject):
                 response = sess.post(
                     f"{APIEndpoints.BASE}/upload/image/{image_uuid}",
                     data=upload_info.to_string(),
-                    headers=get_slowpic_upload_headers(upload_info.len, upload_info.content_type, sess),
+                    headers=get_append_slowpic_upload_headers(upload_info.len, upload_info.content_type, sess),
                     timeout=120
                 )
 
@@ -163,7 +167,7 @@ class AppendSourcesWorker(QObject):
             try:
                 response = sess.get(
                     image_url,
-                    headers=get_slowpic_headers(sess),
+                    headers=get_append_slowpic_headers(sess),
                     timeout=120
                 )
                 response.raise_for_status()
@@ -466,7 +470,11 @@ class AppendSourcesWorker(QObject):
                 if conf.cookies_path.is_file():
                     sess.cookies.update(cookiejar_from_dict(json.loads(conf.cookies_path.read_text(encoding="utf-8"))))
 
-                _ = sess.get(f"{APIEndpoints.BASE}/comparison", headers=get_slowpic_headers(sess), timeout=45)
+                _ = sess.get(
+                    f"{APIEndpoints.BASE}/comparison",
+                    headers=get_append_slowpic_headers(sess),
+                    timeout=45
+                )
 
                 form = MultipartEncoder(fields, str(uuid4()))
                 post_url = (
@@ -477,7 +485,7 @@ class AppendSourcesWorker(QObject):
                 edit_response = sess.post(
                     post_url,
                     data=form.to_string(),
-                    headers=get_slowpic_upload_headers(form.len, form.content_type, sess),
+                    headers=get_append_slowpic_upload_headers(form.len, form.content_type, sess),
                     timeout=180
                 )
 
