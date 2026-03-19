@@ -1,5 +1,9 @@
 # SlowPics Offsets Plugin for VSPreview
 
+> [!WARNING]
+> If slow.pics rate-limits or bans your IP while using this plugin, do not bother Slowbro about plugin-specific issues directly. Please open an issue in this repository instead.
+> Slowbro has made some security / cloudflare tweaks and is in the process of adjusting them so they don't affect plugins as much. Enforcement updates can affect how this plugin behaves over time, so use this at your own risk.
+
 Compare multiple video sources with per-frame, per-source offsets, then upload either as a new slow.pics comp or append to an existing comp.
 <p align="center">
   <img width="528" height="674" alt="preview" src="https://github.com/user-attachments/assets/c4af5de9-7a6e-427c-aa31-1cee4b8867aa" style="width: 40%; height: auto;">
