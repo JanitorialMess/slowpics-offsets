@@ -149,7 +149,9 @@ class AppendSourcesWorker(QObject):
         except Exception:
             return "?"
 
-    def _emit_retry_status(self, uuid: str, label: str, retry_index: int) -> None:
+    def _emit_retry_status(self, uuid: str, label: str, retry_index: int, *, status_code: int | None = None) -> None:
+        if status_code is not None:
+            label = f"{label} ({status_code})"
         self.progress_status.emit(uuid, f"Retry:{label} Retry {retry_index}/{len(RETRY_DELAYS)}...", 0, 0)
 
     def _failure_message_from_status(self, status_code: int) -> str:
@@ -212,7 +214,7 @@ class AppendSourcesWorker(QObject):
                     response.status_code,
                     f": {api_error}" if api_error else "",
                 )
-                self._emit_retry_status(uuid, retry_label, retry_index)
+                self._emit_retry_status(uuid, retry_label, retry_index, status_code=response.status_code)
                 time.sleep(delay)
                 continue
 
